@@ -37,7 +37,6 @@ const programName = "ipfs-cluster-service"
 const (
 	defaultLogLevel  = "info"
 	defaultConsensus = "crdt"
-	defaultDatastore = "pebble"
 )
 
 const (
@@ -274,7 +273,7 @@ the peer IDs in the given multiaddresses.
 				},
 				cli.StringFlag{
 					Name:  "datastore",
-					Usage: "select datastore: 'badger', 'badger3', 'leveldb' or 'pebble'",
+					Usage: datastoreFlagUsage,
 					Value: defaultDatastore,
 				},
 				cli.BoolFlag{
@@ -304,7 +303,7 @@ the peer IDs in the given multiaddresses.
 
 				datastore := c.String("datastore")
 				switch datastore {
-				case "leveldb", "badger", "badger3", "pebble":
+				case "leveldb", "badger", "badger3":
 				default:
 					checkErr("choosing datastore", errors.New("flag value must be set to 'leveldb', 'badger', 'badger3' or 'pebble'"))
 				}
@@ -386,7 +385,6 @@ the peer IDs in the given multiaddresses.
 					peers := ipfscluster.PeersFromMultiaddrs(multiAddrs)
 					cfgHelper.Configs().Crdt.TrustAll = false
 					cfgHelper.Configs().Crdt.TrustedPeers = peers
-					cfgHelper.Configs().Raft.InitPeerset = peers
 				}
 
 				// Save config. Creates the folder.

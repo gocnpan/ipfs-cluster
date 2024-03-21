@@ -78,7 +78,7 @@ func (c *defaultClient) PeerRm(ctx context.Context, id peer.ID) error {
 	ctx, span := trace.StartSpan(ctx, "client/PeerRm")
 	defer span.End()
 
-	return c.do(ctx, "DELETE", fmt.Sprintf("/peers/%s", id), nil, nil, nil)
+	return c.do(ctx, "DELETE", fmt.Sprintf("/peers/%s", id.Pretty()), nil, nil, nil)
 }
 
 // Pin tracks a Cid with the given replication factor and a name for
@@ -122,12 +122,9 @@ func (c *defaultClient) PinPath(ctx context.Context, path string, opts api.PinOp
 	defer span.End()
 
 	var pin api.Pin
-	ipfspath, err := gopath.NewPath(path)
+	ipfspath, err := gopath.ParsePath(path)
 	if err != nil {
-		ipfspath, err = gopath.NewPath("/ipfs/" + path)
-		if err != nil {
-			return api.Pin{}, err
-		}
+		return api.Pin{}, err
 	}
 	query, err := opts.ToQuery()
 	if err != nil {
@@ -156,12 +153,9 @@ func (c *defaultClient) UnpinPath(ctx context.Context, p string) (api.Pin, error
 	defer span.End()
 
 	var pin api.Pin
-	ipfspath, err := gopath.NewPath(p)
+	ipfspath, err := gopath.ParsePath(p)
 	if err != nil {
-		ipfspath, err = gopath.NewPath("/ipfs/" + p)
-		if err != nil {
-			return api.Pin{}, err
-		}
+		return api.Pin{}, err
 	}
 
 	err = c.do(ctx, "DELETE", fmt.Sprintf("/pins%s", ipfspath.String()), nil, nil, &pin)

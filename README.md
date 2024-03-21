@@ -1,3 +1,6 @@
+# 版本说明
+当前版本主要是为了适配路由器等系统而创建的, 去除了`raft`同步协议
+
 # IPFS Cluster
 
 [![Made by](https://img.shields.io/badge/By-Protocol%20Labs-000000.svg?style=flat-square)](https://protocol.ai)

@@ -24,7 +24,6 @@ import (
 	"github.com/ipfs-cluster/ipfs-cluster/adder/adderutils"
 	"github.com/ipfs-cluster/ipfs-cluster/api"
 	"github.com/ipfs-cluster/ipfs-cluster/rpcutil"
-	"github.com/tv42/httpunix"
 
 	handlers "github.com/gorilla/handlers"
 	mux "github.com/gorilla/mux"
@@ -34,6 +33,7 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	rpc "github.com/libp2p/go-libp2p-gorpc"
 	peer "github.com/libp2p/go-libp2p/core/peer"
+	madns "github.com/multiformats/go-multiaddr-dns"
 	manet "github.com/multiformats/go-multiaddr/net"
 
 	"go.opencensus.io/plugin/ochttp"
@@ -58,15 +58,12 @@ type Server struct {
 	ctx    context.Context
 	cancel func()
 
-	config      *Config
-	nodeScheme  string
-	nodeAddr    string
-	nodeNetwork string
+	config     *Config
+	nodeScheme string
+	nodeAddr   string
 
 	rpcClient *rpc.Client
 	rpcReady  chan struct{}
-
-	transport http.RoundTripper // to the proxied kubo RPC API
 
 	listeners    []net.Listener         // proxy listener
 	server       *http.Server           // proxy server
@@ -114,21 +111,22 @@ func New(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 
-	nodeNetwork, nodeAddr, err := manet.DialArgs(cfg.NodeAddr)
-	if err != nil {
-		return nil, err
+	nodeMAddr := cfg.NodeAddr
+	// dns multiaddresses need to be resolved first
+	if madns.Matches(nodeMAddr) {
+		ctx, cancel := context.WithTimeout(context.Background(), DNSTimeout)
+		defer cancel()
+		resolvedAddrs, err := madns.Resolve(ctx, cfg.NodeAddr)
+		if err != nil {
+			logger.Error(err)
+			return nil, err
+		}
+		nodeMAddr = resolvedAddrs[0]
 	}
 
-	transport := http.DefaultTransport
-
-	if nodeNetwork == "unix" {
-		unixTransport := &httpunix.Transport{
-			DialTimeout: time.Second,
-		}
-		unixTransport.RegisterLocation("ipfs", nodeAddr)
-		t := &http.Transport{}
-		t.RegisterProtocol(httpunix.Scheme, unixTransport)
-		transport = t
+	_, nodeAddr, err := manet.DialArgs(nodeMAddr)
+	if err != nil {
+		return nil, err
 	}
 
 	var listeners []net.Listener
@@ -197,16 +195,14 @@ func New(cfg *Config) (*Server, error) {
 	s.SetKeepAlivesEnabled(true) // A reminder that this can be changed
 
 	reverseProxy := httputil.NewSingleHostReverseProxy(proxyURL)
-	reverseProxy.Transport = transport
+	reverseProxy.Transport = http.DefaultTransport
 	ctx, cancel := context.WithCancel(context.Background())
 	proxy := &Server{
 		ctx:          ctx,
 		config:       cfg,
 		cancel:       cancel,
 		nodeAddr:     nodeHTTPAddr,
-		nodeNetwork:  nodeNetwork,
 		nodeScheme:   nodeScheme,
-		transport:    transport,
 		rpcReady:     make(chan struct{}, 1),
 		listeners:    listeners,
 		server:       s,
@@ -363,7 +359,7 @@ func (proxy *Server) pinOpHandler(op string, w http.ResponseWriter, r *http.Requ
 
 	q := r.URL.Query()
 	arg := q.Get("arg")
-	p, err := pathOrCidPath(arg)
+	p, err := path.ParsePath(arg)
 	if err != nil {
 		ipfsErrorResponder(w, "Error parsing IPFS Path: "+err.Error(), -1)
 		return
@@ -532,13 +528,13 @@ func (proxy *Server) pinUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	to := args[1]
 
 	// Parse paths (we will need to resolve them)
-	pFrom, err := pathOrCidPath(from)
+	pFrom, err := path.ParsePath(from)
 	if err != nil {
 		ipfsErrorResponder(w, "error parsing \"from-path\" argument: "+err.Error(), -1)
 		return
 	}
 
-	pTo, err := pathOrCidPath(to)
+	pTo, err := path.ParsePath(to)
 	if err != nil {
 		ipfsErrorResponder(w, "error parsing \"to-path\" argument: "+err.Error(), -1)
 		return
@@ -970,20 +966,4 @@ func slashHandler(origHandler http.HandlerFunc) http.HandlerFunc {
 		r.URL.RawQuery = q.Encode()
 		origHandler(w, r)
 	}
-}
-
-// pathOrCidPath returns a path.Path built from the argument. It keeps the old
-// behavior by building a path from a CID string.
-func pathOrCidPath(str string) (path.Path, error) {
-	p, err := path.NewPath(str)
-	if err == nil {
-		return p, nil
-	}
-
-	if p, err := path.NewPath("/ipfs/" + str); err == nil {
-		return p, nil
-	}
-
-	// Send back original err.
-	return nil, err
 }
