@@ -6,4 +6,4 @@
 
 # 编译 单个
 cd cmd/ipfs-cluster-service
-go build "-trimpath" -mod=readonly -ldflags "-X main.commit=v1008"
+go build "-trimpath" -mod=readonly -ldflags "-X main.commit=v1008" -o cluster
