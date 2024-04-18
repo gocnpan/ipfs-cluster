@@ -6,7 +6,15 @@ MAINTAINER Hector Sanjuan <hector@protocol.ai>
 ENV GOPATH      /go
 ENV SRC_PATH    $GOPATH/src/github.com/ipfs-cluster/ipfs-cluster
 ENV GO111MODULE on
-ENV GOPROXY     https://proxy.golang.org
+# ENV GOPROXY     https://proxy.golang.org
+
+# 配置代理
+ENV http_proxy http://192.168.1.103:10811
+ENV HTTP_PROXY http://192.168.1.103:10811
+ENV https_proxy http://192.168.1.103:10811
+ENV HTTPS_PROXY http://192.168.1.103:10811
+ENV ftp_proxy http://192.168.1.103:10811
+
 
 ENV SUEXEC_VERSION v0.2
 ENV TINI_VERSION v0.19.0
@@ -30,7 +38,7 @@ RUN apt-get update && apt-get install -y ca-certificates
 
 COPY --chown=1000:users go.* $SRC_PATH/
 WORKDIR $SRC_PATH
-RUN go mod download
+# RUN go mod download
 
 COPY --chown=1000:users . $SRC_PATH
 RUN git config --global --add safe.directory /go/src/github.com/ipfs-cluster/ipfs-cluster
