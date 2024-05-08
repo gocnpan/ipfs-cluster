@@ -129,7 +129,7 @@ func (ipfs *mockConnector) RepoGC(ctx context.Context) (api.RepoGC, error) {
 }
 
 func (ipfs *mockConnector) Resolve(ctx context.Context, path string) (api.Cid, error) {
-	_, err := gopath.ParsePath(path)
+	_, err := gopath.NewPath(path)
 	if err != nil {
 		return api.CidUndef, err
 	}
@@ -159,17 +159,19 @@ type mockTracer struct {
 }
 
 func testingCluster(t *testing.T) (*Cluster, *mockAPI, *mockConnector, PinTracker) {
-	ident, clusterCfg, _, _, _, badgerCfg, badger3Cfg, levelDBCfg, crdtCfg, statelesstrackerCfg, psmonCfg, _, _, _ := testingConfigs()
+	ident, clusterCfg, _, _, _, badgerCfg, badger3Cfg, levelDBCfg, pebbleCfg, raftCfg, crdtCfg, statelesstrackerCfg, psmonCfg, _, _, _ := testingConfigs()
 	ctx := context.Background()
 
 	host, pubsub, dht := createHost(t, ident.PrivateKey, clusterCfg.Secret, clusterCfg.ListenAddr)
 
-	folder := filepath.Join(testsFolder, host.ID().Pretty())
+	folder := filepath.Join(testsFolder, host.ID().String())
 	cleanState()
 	clusterCfg.SetBaseDir(folder)
+	raftCfg.DataFolder = folder
 	badgerCfg.Folder = filepath.Join(folder, "badger")
 	badger3Cfg.Folder = filepath.Join(folder, "badger3")
 	levelDBCfg.Folder = filepath.Join(folder, "leveldb")
+	pebbleCfg.Folder = filepath.Join(folder, "pebble")
 
 	api := &mockAPI{}
 	proxy := &mockProxy{}
@@ -177,8 +179,8 @@ func testingCluster(t *testing.T) (*Cluster, *mockAPI, *mockConnector, PinTracke
 
 	tracer := &mockTracer{}
 
-	store := makeStore(t, badgerCfg, badger3Cfg, levelDBCfg)
-	cons := makeConsensus(t, store, host, pubsub, dht, false, crdtCfg)
+	store := makeStore(t, badgerCfg, badger3Cfg, levelDBCfg, pebbleCfg)
+	cons := makeConsensus(t, store, host, pubsub, dht, raftCfg, false, crdtCfg)
 	tracker := stateless.New(statelesstrackerCfg, ident.ID, clusterCfg.Peername, cons.State)
 
 	var peersF func(context.Context) ([]peer.ID, error)
@@ -200,6 +202,8 @@ func testingCluster(t *testing.T) (*Cluster, *mockAPI, *mockConnector, PinTracke
 	numpinCfg := &numpin.Config{}
 	numpinCfg.Default()
 	inf, _ := numpin.NewInformer(numpinCfg)
+
+	ReadyTimeout = raftCfg.WaitForLeaderTimeout + 1*time.Second
 
 	cl, err := NewCluster(
 		ctx,

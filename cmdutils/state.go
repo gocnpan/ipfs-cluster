@@ -7,12 +7,17 @@ import (
 	"fmt"
 	"io"
 
+	ipfscluster "github.com/ipfs-cluster/ipfs-cluster"
 	"github.com/ipfs-cluster/ipfs-cluster/api"
 	"github.com/ipfs-cluster/ipfs-cluster/config"
 	"github.com/ipfs-cluster/ipfs-cluster/consensus/crdt"
+	"github.com/ipfs-cluster/ipfs-cluster/consensus/raft"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/badger"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/badger3"
+	"github.com/ipfs-cluster/ipfs-cluster/datastore/inmem"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/leveldb"
+	"github.com/ipfs-cluster/ipfs-cluster/datastore/pebble"
+	"github.com/ipfs-cluster/ipfs-cluster/pstoremgr"
 	"github.com/ipfs-cluster/ipfs-cluster/state"
 
 	ds "github.com/ipfs/go-datastore"
@@ -32,6 +37,8 @@ type StateManager interface {
 // consensus ("raft" or "crdt"). It will need initialized configs.
 func NewStateManager(consensus string, datastore string, ident *config.Identity, cfgs *Configs) (StateManager, error) {
 	switch consensus {
+	case cfgs.Raft.ConfigKey():
+		return &raftStateManager{ident, cfgs}, nil
 	case cfgs.Crdt.ConfigKey():
 		return &crdtStateManager{
 			cfgs:      cfgs,
@@ -55,6 +62,63 @@ func NewStateManagerWithHelper(cfgHelper *ConfigHelper) (StateManager, error) {
 	)
 }
 
+type raftStateManager struct {
+	ident *config.Identity
+	cfgs  *Configs
+}
+
+func (raftsm *raftStateManager) GetStore() (ds.Datastore, error) {
+	return inmem.New(), nil
+}
+
+func (raftsm *raftStateManager) GetOfflineState(store ds.Datastore) (state.State, error) {
+	return raft.OfflineState(raftsm.cfgs.Raft, store)
+}
+
+func (raftsm *raftStateManager) ImportState(r io.Reader, opts api.PinOptions) error {
+	err := raftsm.Clean()
+	if err != nil {
+		return err
+	}
+
+	store, err := raftsm.GetStore()
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	st, err := raftsm.GetOfflineState(store)
+	if err != nil {
+		return err
+	}
+	err = importState(r, st, opts)
+	if err != nil {
+		return err
+	}
+	pm := pstoremgr.New(context.Background(), nil, raftsm.cfgs.Cluster.GetPeerstorePath())
+	raftPeers := append(
+		ipfscluster.PeersFromMultiaddrs(pm.LoadPeerstore()),
+		raftsm.ident.ID,
+	)
+	return raft.SnapshotSave(raftsm.cfgs.Raft, st, raftPeers)
+}
+
+func (raftsm *raftStateManager) ExportState(w io.Writer) error {
+	store, err := raftsm.GetStore()
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	st, err := raftsm.GetOfflineState(store)
+	if err != nil {
+		return err
+	}
+	return exportState(w, st)
+}
+
+func (raftsm *raftStateManager) Clean() error {
+	return raft.CleanupRaft(raftsm.cfgs.Raft)
+}
+
 type crdtStateManager struct {
 	cfgs      *Configs
 	datastore string
@@ -68,6 +132,8 @@ func (crdtsm *crdtStateManager) GetStore() (ds.Datastore, error) {
 		return badger3.New(crdtsm.cfgs.Badger3)
 	case crdtsm.cfgs.LevelDB.ConfigKey():
 		return leveldb.New(crdtsm.cfgs.LevelDB)
+	case crdtsm.cfgs.Pebble.ConfigKey():
+		return pebble.New(crdtsm.cfgs.Pebble)
 	default:
 		return nil, errors.New("unknown datastore")
 	}

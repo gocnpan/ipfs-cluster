@@ -13,6 +13,7 @@ import (
 	"github.com/ipfs-cluster/ipfs-cluster/cmdutils"
 	"github.com/ipfs-cluster/ipfs-cluster/config"
 	"github.com/ipfs-cluster/ipfs-cluster/consensus/crdt"
+	"github.com/ipfs-cluster/ipfs-cluster/consensus/raft"
 	"github.com/ipfs-cluster/ipfs-cluster/informer/disk"
 	"github.com/ipfs-cluster/ipfs-cluster/informer/pinqueue"
 	"github.com/ipfs-cluster/ipfs-cluster/informer/tags"
@@ -72,9 +73,18 @@ func daemon(c *cli.Context) error {
 
 	// Setup bootstrapping
 	raftStaging := false
-	if !c.Bool("no-trust") {
-		crdtCfg := cfgs.Crdt
-		crdtCfg.TrustedPeers = append(crdtCfg.TrustedPeers, ipfscluster.PeersFromMultiaddrs(bootstraps)...)
+	switch cfgHelper.GetConsensus() {
+	case cfgs.Raft.ConfigKey():
+		if len(bootstraps) > 0 {
+			// Cleanup state if bootstrapping
+			raft.CleanupRaft(cfgs.Raft)
+			raftStaging = true
+		}
+	case cfgs.Crdt.ConfigKey():
+		if !c.Bool("no-trust") {
+			crdtCfg := cfgs.Crdt
+			crdtCfg.TrustedPeers = append(crdtCfg.TrustedPeers, ipfscluster.PeersFromMultiaddrs(bootstraps)...)
+		}
 	}
 
 	if c.Bool("leave") {
@@ -129,7 +139,7 @@ func createCluster(
 	checkErr("getting configuration string", err)
 	logger.Debugf("Configuration:\n%s\n", cfgBytes)
 
-	ctx, err = tag.New(ctx, tag.Upsert(observations.HostKey, host.ID().Pretty()))
+	ctx, err = tag.New(ctx, tag.Upsert(observations.HostKey, host.ID().String()))
 	checkErr("tag context with host id", err)
 
 	err = observations.SetupMetrics(cfgs.Metrics)
@@ -145,7 +155,11 @@ func createCluster(
 		// clusters. Collaborative clusters are likely to share the
 		// secret with untrusted peers, thus the API would be open for
 		// anyone.
-		api, err = rest.NewAPI(ctx, cfgs.Restapi)
+		if cfgHelper.GetConsensus() == cfgs.Raft.ConfigKey() {
+			api, err = rest.NewAPIWithHost(ctx, cfgs.Restapi, host)
+		} else {
+			api, err = rest.NewAPI(ctx, cfgs.Restapi)
+		}
 		checkErr("creating REST API component", err)
 		apis = append(apis, api)
 
@@ -210,6 +224,9 @@ func createCluster(
 	}
 
 	var peersF func(context.Context) ([]peer.ID, error)
+	if cfgHelper.GetConsensus() == cfgs.Raft.ConfigKey() {
+		peersF = cons.Peers
+	}
 
 	tracker := stateless.New(cfgs.Statelesstracker, host.ID(), cfgs.Cluster.Peername, cons.State)
 	logger.Debug("stateless pintracker loaded")
@@ -272,6 +289,18 @@ func setupConsensus(
 
 	cfgs := cfgHelper.Configs()
 	switch cfgHelper.GetConsensus() {
+	case cfgs.Raft.ConfigKey():
+		rft, err := raft.NewConsensus(
+			h,
+			cfgHelper.Configs().Raft,
+			store,
+			raftStaging,
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating Raft component")
+		}
+		ipfscluster.ReadyTimeout = cfgs.Raft.WaitForLeaderTimeout + 5*time.Second
+		return rft, nil
 	case cfgs.Crdt.ConfigKey():
 		convrdt, err := crdt.New(
 			h,

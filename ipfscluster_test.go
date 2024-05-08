@@ -19,10 +19,12 @@ import (
 	"github.com/ipfs-cluster/ipfs-cluster/api"
 	"github.com/ipfs-cluster/ipfs-cluster/api/rest"
 	"github.com/ipfs-cluster/ipfs-cluster/consensus/crdt"
+	"github.com/ipfs-cluster/ipfs-cluster/consensus/raft"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/badger"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/badger3"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/inmem"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/leveldb"
+	"github.com/ipfs-cluster/ipfs-cluster/datastore/pebble"
 	"github.com/ipfs-cluster/ipfs-cluster/informer/disk"
 	"github.com/ipfs-cluster/ipfs-cluster/ipfsconn/ipfshttp"
 	"github.com/ipfs-cluster/ipfs-cluster/monitor/pubsubmon"
@@ -56,7 +58,7 @@ var (
 	customLogLvlFacilities = logFacilities{}
 
 	consensus = "crdt"
-	datastore = "badger3"
+	datastore = "pebble"
 
 	ttlDelayTime = 2 * time.Second // set on Main to diskInf.MetricTTL
 	testsFolder  = "clusterTestsFolder"
@@ -175,13 +177,13 @@ func createComponents(
 
 	peername := fmt.Sprintf("peer_%d", i)
 
-	ident, clusterCfg, apiCfg, ipfsproxyCfg, ipfshttpCfg, badgerCfg, badger3Cfg, levelDBCfg, crdtCfg, statelesstrackerCfg, psmonCfg, allocBalancedCfg, diskInfCfg, tracingCfg := testingConfigs()
+	ident, clusterCfg, apiCfg, ipfsproxyCfg, ipfshttpCfg, badgerCfg, badger3Cfg, levelDBCfg, pebbleCfg, raftCfg, crdtCfg, statelesstrackerCfg, psmonCfg, allocBalancedCfg, diskInfCfg, tracingCfg := testingConfigs()
 
 	ident.ID = host.ID()
 	ident.PrivateKey = host.Peerstore().PrivKey(host.ID())
 	clusterCfg.Peername = peername
 	clusterCfg.LeaveOnShutdown = false
-	clusterCfg.SetBaseDir(filepath.Join(testsFolder, host.ID().Pretty()))
+	clusterCfg.SetBaseDir(filepath.Join(testsFolder, host.ID().String()))
 
 	apiCfg.HTTPListenAddr = []ma.Multiaddr{apiAddr}
 
@@ -190,9 +192,12 @@ func createComponents(
 
 	ipfshttpCfg.NodeAddr = nodeAddr
 
-	badgerCfg.Folder = filepath.Join(testsFolder, host.ID().Pretty(), "badger")
-	badger3Cfg.Folder = filepath.Join(testsFolder, host.ID().Pretty(), "badger3")
-	levelDBCfg.Folder = filepath.Join(testsFolder, host.ID().Pretty(), "leveldb")
+	raftCfg.DataFolder = filepath.Join(testsFolder, host.ID().String())
+
+	badgerCfg.Folder = filepath.Join(testsFolder, host.ID().String(), "badger")
+	badger3Cfg.Folder = filepath.Join(testsFolder, host.ID().String(), "badger3")
+	levelDBCfg.Folder = filepath.Join(testsFolder, host.ID().String(), "leveldb")
+	pebbleCfg.Folder = filepath.Join(testsFolder, host.ID().String(), "pebble")
 
 	api, err := rest.NewAPI(ctx, apiCfg)
 	if err != nil {
@@ -218,11 +223,14 @@ func createComponents(
 		t.Fatal(err)
 	}
 
-	store := makeStore(t, badgerCfg, badger3Cfg, levelDBCfg)
-	cons := makeConsensus(t, store, host, pubsub, dht, staging, crdtCfg)
+	store := makeStore(t, badgerCfg, badger3Cfg, levelDBCfg, pebbleCfg)
+	cons := makeConsensus(t, store, host, pubsub, dht, raftCfg, staging, crdtCfg)
 	tracker := stateless.New(statelesstrackerCfg, ident.ID, clusterCfg.Peername, cons.State)
 
 	var peersF func(context.Context) ([]peer.ID, error)
+	if consensus == "raft" {
+		peersF = cons.Peers
+	}
 	mon, err := pubsubmon.New(ctx, psmonCfg, pubsub, peersF)
 	if err != nil {
 		t.Fatal(err)
@@ -236,7 +244,7 @@ func createComponents(
 	return clusterCfg, store, cons, []API{api, ipfsProxy}, ipfs, tracker, mon, alloc, inf, tracer, mock
 }
 
-func makeStore(t *testing.T, badgerCfg *badger.Config, badger3Cfg *badger3.Config, levelDBCfg *leveldb.Config) ds.Datastore {
+func makeStore(t *testing.T, badgerCfg *badger.Config, badger3Cfg *badger3.Config, levelDBCfg *leveldb.Config, pebbleCfg *pebble.Config) ds.Datastore {
 	switch consensus {
 	case "crdt":
 		switch datastore {
@@ -258,6 +266,12 @@ func makeStore(t *testing.T, badgerCfg *badger.Config, badger3Cfg *badger3.Confi
 				t.Fatal(err)
 			}
 			return dstr
+		case "pebble":
+			dstr, err := pebble.New(pebbleCfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return dstr
 		default:
 			t.Fatal("bad datastore")
 			return nil
@@ -268,8 +282,14 @@ func makeStore(t *testing.T, badgerCfg *badger.Config, badger3Cfg *badger3.Confi
 	}
 }
 
-func makeConsensus(t *testing.T, store ds.Datastore, h host.Host, psub *pubsub.PubSub, dht *dual.DHT, staging bool, crdtCfg *crdt.Config) Consensus {
+func makeConsensus(t *testing.T, store ds.Datastore, h host.Host, psub *pubsub.PubSub, dht *dual.DHT, raftCfg *raft.Config, staging bool, crdtCfg *crdt.Config) Consensus {
 	switch consensus {
+	case "raft":
+		raftCon, err := raft.NewConsensus(h, raftCfg, store, staging)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raftCon
 	case "crdt":
 		crdtCon, err := crdt.New(h, dht, psub, crdtCfg, store)
 		if err != nil {
@@ -985,6 +1005,48 @@ func TestClustersStatusAllWithErrors(t *testing.T) {
 
 		// Raft and CRDT behave differently here
 		switch consensus {
+		case "raft":
+			// Raft will have all statuses with one of them
+			// being in ERROR because the peer is off
+
+			stts := statuses[0]
+			if len(stts.PeerMap) != nClusters {
+				t.Error("bad number of peers in status")
+			}
+
+			pid := clusters[1].id.String()
+			errst := stts.PeerMap[pid]
+
+			if errst.Status != api.TrackerStatusClusterError {
+				t.Error("erroring status should be set to ClusterError:", errst.Status)
+			}
+			if errst.PeerName != "peer_1" {
+				t.Error("peername should have been set in the erroring peer too from the cache")
+			}
+
+			if errst.IPFS != test.PeerID1 {
+				t.Error("IPFS ID should have been set in the erroring peer too from the cache")
+			}
+
+			// now check with Cid status
+			status, err := c.Status(ctx, h)
+			if err != nil {
+				t.Error(err)
+			}
+
+			pinfo := status.PeerMap[pid]
+
+			if pinfo.Status != api.TrackerStatusClusterError {
+				t.Error("erroring status should be ClusterError:", pinfo.Status)
+			}
+
+			if pinfo.PeerName != "peer_1" {
+				t.Error("peername should have been set in the erroring peer too from the cache")
+			}
+
+			if pinfo.IPFS != test.PeerID1 {
+				t.Error("IPFS ID should have been set in the erroring peer too from the cache")
+			}
 		case "crdt":
 			// CRDT will not have contacted the offline peer because
 			// its metric expired and therefore is not in the
@@ -1686,7 +1748,7 @@ func TestClustersReplicationRealloc(t *testing.T) {
 	for i, c := range clusters {
 		pinfo := c.tracker.Status(ctx, h)
 		if pinfo.Status == api.TrackerStatusPinned {
-			//t.Logf("Killing %s", c.id.Pretty())
+			//t.Logf("Killing %s", c.id)
 			killedClusterIndex = i
 			t.Logf("Shutting down %s", c.ID(ctx).ID)
 			c.Shutdown(ctx)
@@ -1718,7 +1780,7 @@ func TestClustersReplicationRealloc(t *testing.T) {
 			continue
 		}
 		pinfo := c.tracker.Status(ctx, h)
-		t.Log(pinfo.Peer.Pretty(), pinfo.Status)
+		t.Log(pinfo.Peer, pinfo.Status)
 		if pinfo.Status == api.TrackerStatusPinned {
 			numPinned++
 		}
@@ -2034,7 +2096,7 @@ func TestClustersDisabledRepinning(t *testing.T) {
 		}
 		pinfo := c.tracker.Status(ctx, h)
 		if pinfo.Status == api.TrackerStatusPinned {
-			//t.Log(pinfo.Peer.Pretty())
+			//t.Log(pinfo.Peer)
 			numPinned++
 		}
 	}

@@ -43,3 +43,5 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+/cmd/ipfs-cluster-service/cluster.*

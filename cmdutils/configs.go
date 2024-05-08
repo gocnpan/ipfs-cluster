@@ -14,9 +14,11 @@ import (
 	"github.com/ipfs-cluster/ipfs-cluster/api/rest"
 	"github.com/ipfs-cluster/ipfs-cluster/config"
 	"github.com/ipfs-cluster/ipfs-cluster/consensus/crdt"
+	"github.com/ipfs-cluster/ipfs-cluster/consensus/raft"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/badger"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/badger3"
 	"github.com/ipfs-cluster/ipfs-cluster/datastore/leveldb"
+	"github.com/ipfs-cluster/ipfs-cluster/datastore/pebble"
 	"github.com/ipfs-cluster/ipfs-cluster/informer/disk"
 	"github.com/ipfs-cluster/ipfs-cluster/informer/numpin"
 	"github.com/ipfs-cluster/ipfs-cluster/informer/pinqueue"
@@ -34,6 +36,7 @@ type Configs struct {
 	Pinsvcapi        *pinsvcapi.Config
 	Ipfsproxy        *ipfsproxy.Config
 	Ipfshttp         *ipfshttp.Config
+	Raft             *raft.Config
 	Crdt             *crdt.Config
 	Statelesstracker *stateless.Config
 	Pubsubmon        *pubsubmon.Config
@@ -47,6 +50,7 @@ type Configs struct {
 	Badger           *badger.Config
 	Badger3          *badger3.Config
 	LevelDB          *leveldb.Config
+	Pebble           *pebble.Config
 }
 
 // ConfigHelper helps managing the configuration and identity files with the
@@ -171,7 +175,16 @@ func (ch *ConfigHelper) GetConsensus() string {
 	if ch.consensus != "" {
 		return ch.consensus
 	}
-	return ch.configs.Crdt.ConfigKey()
+	crdtLoaded := ch.manager.IsLoadedFromJSON(config.Consensus, ch.configs.Crdt.ConfigKey())
+	raftLoaded := ch.manager.IsLoadedFromJSON(config.Consensus, ch.configs.Raft.ConfigKey())
+	if crdtLoaded == raftLoaded { //both loaded or none
+		return ""
+	}
+
+	if crdtLoaded {
+		return ch.configs.Crdt.ConfigKey()
+	}
+	return ch.configs.Raft.ConfigKey()
 }
 
 // GetDatastore attempts to return the configured datastore.  If the
@@ -188,9 +201,10 @@ func (ch *ConfigHelper) GetDatastore() string {
 	badgerLoaded := ch.manager.IsLoadedFromJSON(config.Datastore, ch.configs.Badger.ConfigKey())
 	badger3Loaded := ch.manager.IsLoadedFromJSON(config.Datastore, ch.configs.Badger3.ConfigKey())
 	levelDBLoaded := ch.manager.IsLoadedFromJSON(config.Datastore, ch.configs.LevelDB.ConfigKey())
+	pebbleLoaded := ch.manager.IsLoadedFromJSON(config.Datastore, ch.configs.Pebble.ConfigKey())
 
 	nLoaded := 0
-	for _, v := range []bool{badgerLoaded, badger3Loaded, levelDBLoaded} {
+	for _, v := range []bool{badgerLoaded, badger3Loaded, levelDBLoaded, pebbleLoaded} {
 		if v {
 			nLoaded++
 		}
@@ -205,6 +219,8 @@ func (ch *ConfigHelper) GetDatastore() string {
 		return ch.configs.Badger3.ConfigKey()
 	case levelDBLoaded:
 		return ch.configs.LevelDB.ConfigKey()
+	case pebbleLoaded:
+		return ch.configs.Pebble.ConfigKey()
 	default:
 		return ""
 	}
@@ -219,6 +235,7 @@ func (ch *ConfigHelper) init() {
 		Pinsvcapi:        pinsvcapi.NewConfig(),
 		Ipfsproxy:        &ipfsproxy.Config{},
 		Ipfshttp:         &ipfshttp.Config{},
+		Raft:             &raft.Config{},
 		Crdt:             &crdt.Config{},
 		Statelesstracker: &stateless.Config{},
 		Pubsubmon:        &pubsubmon.Config{},
@@ -232,6 +249,7 @@ func (ch *ConfigHelper) init() {
 		Badger:           &badger.Config{},
 		Badger3:          &badger3.Config{},
 		LevelDB:          &leveldb.Config{},
+		Pebble:           &pebble.Config{},
 	}
 	man.RegisterComponent(config.Cluster, cfgs.Cluster)
 	man.RegisterComponent(config.API, cfgs.Restapi)
@@ -251,10 +269,13 @@ func (ch *ConfigHelper) init() {
 	registerDatastores := false
 
 	switch ch.consensus {
+	case cfgs.Raft.ConfigKey():
+		man.RegisterComponent(config.Consensus, cfgs.Raft)
 	case cfgs.Crdt.ConfigKey():
 		man.RegisterComponent(config.Consensus, cfgs.Crdt)
 		registerDatastores = true
 	default:
+		man.RegisterComponent(config.Consensus, cfgs.Raft)
 		man.RegisterComponent(config.Consensus, cfgs.Crdt)
 		registerDatastores = true
 	}
@@ -267,11 +288,14 @@ func (ch *ConfigHelper) init() {
 			man.RegisterComponent(config.Datastore, cfgs.Badger3)
 		case cfgs.LevelDB.ConfigKey():
 			man.RegisterComponent(config.Datastore, cfgs.LevelDB)
+		case cfgs.Pebble.ConfigKey():
+			man.RegisterComponent(config.Datastore, cfgs.Pebble)
 
 		default:
 			man.RegisterComponent(config.Datastore, cfgs.Badger)
 			man.RegisterComponent(config.Datastore, cfgs.Badger3)
 			man.RegisterComponent(config.Datastore, cfgs.LevelDB)
+			man.RegisterComponent(config.Datastore, cfgs.Pebble)
 
 		}
 	}
@@ -318,10 +342,11 @@ func (ch *ConfigHelper) SaveIdentityToDisk() error {
 func (ch *ConfigHelper) SetupTracing(forceEnabled bool) {
 	enabled := forceEnabled || ch.configs.Tracing.EnableTracing
 
-	ch.configs.Tracing.ClusterID = ch.Identity().ID.Pretty()
+	ch.configs.Tracing.ClusterID = ch.Identity().ID.String()
 	ch.configs.Tracing.ClusterPeername = ch.configs.Cluster.Peername
 	ch.configs.Tracing.EnableTracing = enabled
 	ch.configs.Cluster.Tracing = enabled
+	ch.configs.Raft.Tracing = enabled
 	ch.configs.Crdt.Tracing = enabled
 	ch.configs.Restapi.Tracing = enabled
 	ch.configs.Pinsvcapi.Tracing = enabled
