@@ -1,59 +1,39 @@
-FROM golang:1.19-buster AS builder
-MAINTAINER Hector Sanjuan <hector@protocol.ai>
+FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:1.20-bullseye AS builder
+MAINTAINER Hector Sanjuan <code@hector.link>
 
 # This dockerfile builds and runs ipfs-cluster-service.
+ARG TARGETPLATFORM TARGETOS TARGETARCH
 
 ENV GOPATH      /go
 ENV SRC_PATH    $GOPATH/src/github.com/ipfs-cluster/ipfs-cluster
-ENV GO111MODULE on
-# ENV GOPROXY     https://proxy.golang.org
-
-# 配置代理
-ENV http_proxy http://192.168.1.103:10811
-ENV HTTP_PROXY http://192.168.1.103:10811
-ENV https_proxy http://192.168.1.103:10811
-ENV HTTPS_PROXY http://192.168.1.103:10811
-ENV ftp_proxy http://192.168.1.103:10811
-
-
-ENV SUEXEC_VERSION v0.2
-ENV TINI_VERSION v0.19.0
-RUN set -eux; \
-    dpkgArch="$(dpkg --print-architecture)"; \
-    case "${dpkgArch##*-}" in \
-        "amd64" | "armhf" | "arm64") tiniArch="tini-static-$dpkgArch" ;;\
-        *) echo >&2 "unsupported architecture: ${dpkgArch}"; exit 1 ;; \
-    esac; \
-  cd /tmp \
-  && git clone https://github.com/ncopa/su-exec.git \
-  && cd su-exec \
-  && git checkout -q $SUEXEC_VERSION \
-  && make su-exec-static \
-  && cd /tmp \
-  && wget -q -O tini https://github.com/krallin/tini/releases/download/$TINI_VERSION/$tiniArch \
-  && chmod +x tini
-
-# Get the TLS CA certificates, they're not provided by busybox.
-RUN apt-get update && apt-get install -y ca-certificates
+ENV GOPROXY     https://proxy.golang.org
 
 COPY --chown=1000:users go.* $SRC_PATH/
 WORKDIR $SRC_PATH
-# RUN go mod download
+# RUN go mod download -x
 
 COPY --chown=1000:users . $SRC_PATH
 RUN git config --global --add safe.directory /go/src/github.com/ipfs-cluster/ipfs-cluster
+
+ENV CGO_ENABLED 0
 RUN make install
 
 
 #------------------------------------------------------
-FROM busybox:1-glibc
+FROM alpine:3.18
 MAINTAINER Hector Sanjuan <hector@protocol.ai>
+
+LABEL org.opencontainers.image.source=https://github.com/ipfs-cluster/ipfs-cluster
+LABEL org.opencontainers.image.description="Pinset orchestration for IPFS"
+LABEL org.opencontainers.image.licenses=MIT+APACHE_2.0
+
+# Install binaries for $TARGETARCH
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && apk add --no-cache tini su-exec ca-certificates
 
 ENV GOPATH                 /go
 ENV SRC_PATH               /go/src/github.com/ipfs-cluster/ipfs-cluster
 ENV IPFS_CLUSTER_PATH      /data/ipfs-cluster
 ENV IPFS_CLUSTER_CONSENSUS crdt
-ENV IPFS_CLUSTER_DATASTORE pebble
 
 EXPOSE 9094
 EXPOSE 9095
@@ -63,9 +43,6 @@ COPY --from=builder $GOPATH/bin/ipfs-cluster-service /usr/local/bin/ipfs-cluster
 COPY --from=builder $GOPATH/bin/ipfs-cluster-ctl /usr/local/bin/ipfs-cluster-ctl
 COPY --from=builder $GOPATH/bin/ipfs-cluster-follow /usr/local/bin/ipfs-cluster-follow
 COPY --from=builder $SRC_PATH/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY --from=builder /tmp/su-exec/su-exec-static /sbin/su-exec
-COPY --from=builder /tmp/tini /sbin/tini
-COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 
 RUN mkdir -p $IPFS_CLUSTER_PATH && \
     adduser -D -h $IPFS_CLUSTER_PATH -u 1000 -G users ipfs && \

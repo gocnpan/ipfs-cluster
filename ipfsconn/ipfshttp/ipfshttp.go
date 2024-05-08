@@ -19,11 +19,11 @@ import (
 	"github.com/ipfs-cluster/ipfs-cluster/api"
 	"github.com/ipfs-cluster/ipfs-cluster/observations"
 
+	files "github.com/ipfs/boxo/files"
+	gopath "github.com/ipfs/boxo/path"
+	ipfspinner "github.com/ipfs/boxo/pinning/pinner"
 	cid "github.com/ipfs/go-cid"
-	files "github.com/ipfs/go-libipfs/files"
-	ipfspinner "github.com/ipfs/go-ipfs-pinner"
 	logging "github.com/ipfs/go-log/v2"
-	gopath "github.com/ipfs/go-path"
 	rpc "github.com/libp2p/go-libp2p-gorpc"
 	peer "github.com/libp2p/go-libp2p/core/peer"
 	madns "github.com/multiformats/go-multiaddr-dns"
@@ -1113,7 +1113,7 @@ func (ipfs *Connector) BlockStream(ctx context.Context, blocks <-chan api.NodeWi
 	// directly, but leave a goroutine draining the channel until it is
 	// closed, which should be soon after returning.
 	stats.Record(ctx, observations.BlocksPut.M(1))
-	multiFileR := files.NewMultiFileReader(dir, true)
+	multiFileR := files.NewMultiFileReader(dir, true, false)
 	contentType := "multipart/form-data; boundary=" + multiFileR.Boundary()
 	body, err := ipfs.postCtxStreamResponse(ctx, url, contentType, multiFileR)
 	if err != nil {

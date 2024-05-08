@@ -19,19 +19,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 
 	jwt "github.com/golang-jwt/jwt/v4"
 	types "github.com/ipfs-cluster/ipfs-cluster/api"
 	state "github.com/ipfs-cluster/ipfs-cluster/state"
+	gopath "github.com/ipfs/boxo/path"
 	logging "github.com/ipfs/go-log/v2"
-	gopath "github.com/ipfs/go-path"
 	libp2p "github.com/libp2p/go-libp2p"
 	rpc "github.com/libp2p/go-libp2p-gorpc"
 	gostream "github.com/libp2p/go-libp2p-gostream"
@@ -49,10 +47,6 @@ import (
 	"go.opencensus.io/plugin/ochttp/propagation/tracecontext"
 	"go.opencensus.io/trace"
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 // StreamChannelSize is used to define buffer sizes for channels.
 const StreamChannelSize = 1024
@@ -300,9 +294,9 @@ func (api *API) authHandler(h http.Handler, lggr *logging.ZapEventLogger) http.H
 	}
 
 	wrap := func(w http.ResponseWriter, r *http.Request) {
-		// We let CORS preflight requests pass through the next
-		// handler.
-		if r.Method == http.MethodOptions {
+		// We let CORS preflight and Health requests pass through to
+		// the next handler.
+		if r.Method == http.MethodOptions || (r.Method == http.MethodGet && r.URL.Path == "/health") {
 			h.ServeHTTP(w, r)
 			return
 		}
@@ -852,4 +846,8 @@ func (api *API) Headers() map[string][]string {
 // for testing.
 func (api *API) SetKeepAlivesEnabled(b bool) {
 	api.server.SetKeepAlivesEnabled(b)
+}
+
+func (api *API) HealthHandler(w http.ResponseWriter, r *http.Request) {
+	api.SendResponse(w, http.StatusNoContent, nil, nil)
 }

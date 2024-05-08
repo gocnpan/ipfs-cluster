@@ -3,6 +3,6 @@
 package main
 
 const (
-	defaultDatastore   = "pebble"
+	defaultDatastore   = "badger3"
 	datastoreFlagUsage = "select datastore: 'badger', 'badger3', 'leveldb' or 'pebble'"
 )

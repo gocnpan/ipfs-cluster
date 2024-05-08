@@ -303,7 +303,7 @@ the peer IDs in the given multiaddresses.
 
 				datastore := c.String("datastore")
 				switch datastore {
-				case "leveldb", "badger", "badger3", "pebble":
+				case "leveldb", "badger", "badger3":
 				default:
 					checkErr("choosing datastore", errors.New("flag value must be set to 'leveldb', 'badger', 'badger3' or 'pebble'"))
 				}
@@ -385,7 +385,6 @@ the peer IDs in the given multiaddresses.
 					peers := ipfscluster.PeersFromMultiaddrs(multiAddrs)
 					cfgHelper.Configs().Crdt.TrustAll = false
 					cfgHelper.Configs().Crdt.TrustedPeers = peers
-					cfgHelper.Configs().Raft.InitPeerset = peers
 				}
 
 				// Save config. Creates the folder.

@@ -12,8 +12,8 @@ import (
 
 	"github.com/ipfs-cluster/ipfs-cluster/api"
 
+	files "github.com/ipfs/boxo/files"
 	shell "github.com/ipfs/go-ipfs-api"
-	files "github.com/ipfs/go-libipfs/files"
 	logging "github.com/ipfs/go-log/v2"
 	host "github.com/libp2p/go-libp2p/core/host"
 	peer "github.com/libp2p/go-libp2p/core/peer"
@@ -122,6 +122,9 @@ type Client interface {
 	// returns collected CIDs. If local is true, it would garbage collect
 	// only on contacted peer, otherwise on all peers' IPFS daemons.
 	RepoGC(ctx context.Context, local bool) (api.GlobalRepoGC, error)
+	
+	// Health returns no content when everything is ok, and an error otherwise
+	Health(ctx context.Context) (error)
 }
 
 // Config allows to configure the parameters to connect

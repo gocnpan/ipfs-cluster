@@ -14,8 +14,8 @@ import (
 	"github.com/ipld/go-car"
 	peer "github.com/libp2p/go-libp2p/core/peer"
 
+	files "github.com/ipfs/boxo/files"
 	cid "github.com/ipfs/go-cid"
-	files "github.com/ipfs/go-libipfs/files"
 )
 
 type mockCDAGServ struct {
@@ -119,7 +119,7 @@ func TestAdder_ContextCancelled(t *testing.T) {
 		"a": lg,
 		"b": st,
 	})
-	mr := files.NewMultiFileReader(slf, true)
+	mr := files.NewMultiFileReader(slf, true, false)
 
 	r := multipart.NewReader(mr, mr.Boundary())
 
@@ -174,7 +174,7 @@ func TestAdder_CAR(t *testing.T) {
 	carDir := files.NewMapDirectory(
 		map[string]files.Node{"": carFile},
 	)
-	carMf := files.NewMultiFileReader(carDir, true)
+	carMf := files.NewMultiFileReader(carDir, true, false)
 	carMr := multipart.NewReader(carMf, carMf.Boundary())
 
 	// Add the car, discarding old dags.

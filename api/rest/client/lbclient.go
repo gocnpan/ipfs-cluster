@@ -4,9 +4,11 @@ import (
 	"context"
 	"sync/atomic"
 
-	shell "github.com/ipfs/go-ipfs-api"
-	files "github.com/ipfs/go-libipfs/files"
 	"github.com/ipfs-cluster/ipfs-cluster/api"
+
+	files "github.com/ipfs/boxo/files"
+	shell "github.com/ipfs/go-ipfs-api"
+
 	peer "github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -552,4 +554,13 @@ func (lc *loadBalancingClient) IPFS(ctx context.Context) *shell.Shell {
 	lc.retry(0, call)
 
 	return s
+}
+
+func (lc *loadBalancingClient) Health(ctx context.Context) error {
+	call := func(c Client) error {
+		err := c.Health(ctx)
+		return err
+	}
+	err := lc.retry(0, call)
+	return err
 }

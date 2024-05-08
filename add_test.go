@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	files "github.com/ipfs/go-libipfs/files"
 	"github.com/ipfs-cluster/ipfs-cluster/adder"
 	"github.com/ipfs-cluster/ipfs-cluster/api"
 	"github.com/ipfs-cluster/ipfs-cluster/test"
+	files "github.com/ipfs/boxo/files"
 	peer "github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -211,7 +211,7 @@ func TestAddOnePeerFails(t *testing.T) {
 		lg, closer := sth.GetRandFileReader(t, 100000) // 100 MB
 		defer closer.Close()
 
-		mr := files.NewMultiFileReader(lg, true)
+		mr := files.NewMultiFileReader(lg, true, false)
 		r := multipart.NewReader(mr, mr.Boundary())
 
 		var wg sync.WaitGroup
@@ -268,7 +268,7 @@ func TestAddAllPeersFail(t *testing.T) {
 
 		lg, closer := sth.GetRandFileReader(t, 100000) // 100 MB
 		defer closer.Close()
-		mr := files.NewMultiFileReader(lg, true)
+		mr := files.NewMultiFileReader(lg, true, false)
 		r := multipart.NewReader(mr, mr.Boundary())
 
 		// var cid cid.Cid

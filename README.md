@@ -1,3 +1,7 @@
+# 版本说明
+
+当前代码仓库从`v1.0.6-ap`基础上切换到`tag:v1.0.7`, 删减了`raft`同步算法, 以适配各种盒子（精简版系统）
+
 # IPFS Cluster
 
 [![Made by](https://img.shields.io/badge/By-Protocol%20Labs-000000.svg?style=flat-square)](https://protocol.ai)
