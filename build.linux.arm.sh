@@ -9,5 +9,5 @@ export GOARCH=arm
 # VFP（Vector Floating Point）是浮点处理单元协处理器，提供低功耗的单精度和双精度浮点计算
 export GOARM=5
 
-cd /home/ap/data/workspace/test-demo/demo/ipfs/ipfs-cluster/cmd/ipfs-cluster-service
+cd `pwd`/cmd/ipfs-cluster-service
 go build "-trimpath" -mod=readonly -ldflags "-X main.commit=f98afd0b9b04680bf760fedd664bbdf1c43bf493"
