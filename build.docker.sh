@@ -1,5 +1,5 @@
 readonly env=dev
-readonly tag=v1.0.6
+readonly tag=v1.1.0
 readonly imageName=ipfs/ipfs-cluster
 docker build -t ${imageName}-${env}:${tag} .
 docker tag ${imageName}-${env}:${tag} docker.isecsp.com/${imageName}-${env}:${tag}
