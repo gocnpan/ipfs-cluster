@@ -1,4 +1,4 @@
-FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:1.21-bullseye AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:1.23-bullseye AS builder
 MAINTAINER Hector Sanjuan <code@hector.link>
 
 # This dockerfile builds and runs ipfs-cluster-service.
@@ -28,7 +28,7 @@ LABEL org.opencontainers.image.description="Pinset orchestration for IPFS"
 LABEL org.opencontainers.image.licenses=MIT+APACHE_2.0
 
 # Install binaries for $TARGETARCH
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && apk add --no-cache tini su-exec ca-certificates
+RUN apk add --no-cache tini su-exec ca-certificates
 
 ENV GOPATH                 /go
 ENV SRC_PATH               /go/src/github.com/ipfs-cluster/ipfs-cluster

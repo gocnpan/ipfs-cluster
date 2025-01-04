@@ -1,15 +1,18 @@
 # 版本说明
 
 ## change log
+`1.1.0` -> `1.1.2`
+`1.1.2`是在原仓库的基础上`1.1.0`, 增加了编译脚本
+
 `1.0.7` -> `1.1.0`
-`1.1.0`是在原仓库的基础上`1.1.0`, 增加了编译脚本
+`1.1.0`是在原仓库的基础上`1.0.7`, 增加了编译脚本
 
 `1.0.6` -> `1.0.7`
 当前代码仓库从v1.0.6-ap基础上切换到tag:v1.0.7, 删减了raft同步算法, 以适配各种盒子（精简版系统）
 
 # IPFS Cluster
 
-[![Made by](https://img.shields.io/badge/By-Protocol%20Labs-000000.svg?style=flat-square)](https://protocol.ai)
+[![Made by](https://img.shields.io/badge/By-IP%20Shipyard-000000.svg?style=flat-square)](https://ipshipyard.com)
 [![Main project](https://img.shields.io/badge/project-ipfs--cluster-ef5c43.svg?style=flat-square)](http://github.com/ipfs-cluster)
 [![Discord](https://img.shields.io/badge/forum-discuss.ipfs.io-f9a035.svg?style=flat-square)](https://discuss.ipfs.io/c/help/help-ipfs-cluster/24)
 [![Matrix channel](https://img.shields.io/badge/matrix-%23ipfs--cluster-3c8da0.svg?style=flat-square)](https://app.element.io/#/room/#ipfs-cluster:ipfs.io)
@@ -78,5 +81,3 @@ PRs accepted. As part of the IPFS project, we have some [contribution guidelines
 ## License
 
 This library is dual-licensed under Apache 2.0 and MIT terms.
-
-© 2022. Protocol Labs, Inc.

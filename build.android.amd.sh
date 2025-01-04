@@ -1,5 +1,3 @@
-g use 1.22.8
-
 export GOOS=android
 export GOARCH=386
 export CGO_ENABLED=1
@@ -12,5 +10,5 @@ rm cluster.amd
 go build \
  "-trimpath" \
  -mod=readonly \
- -ldflags "-X main.commit=v110ap" \
+ -ldflags "-checklinkname=0 -X main.commit=v112ap" \
  -o "cluster.amd" .

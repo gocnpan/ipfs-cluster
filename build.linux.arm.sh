@@ -1,4 +1,5 @@
 # make build CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5
+g use 1.23.4
 
 export CGO_ENABLED=0
 export GOOS=linux

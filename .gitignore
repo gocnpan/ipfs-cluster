@@ -3,7 +3,6 @@ coverage.out
 cmd/ipfs-cluster-service/ipfs-cluster-service
 cmd/ipfs-cluster-ctl/ipfs-cluster-ctl
 cmd/ipfs-cluster-follow/ipfs-cluster-follow
-cmd/ipfs-cluster-service/data
 cmd/ipfs-cluster-service/cluster.*
 sharness/lib/sharness
 sharness/test-results
@@ -45,4 +44,3 @@ _testmain.go
 *.exe
 *.test
 *.prof
-
