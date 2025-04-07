@@ -1,5 +1,3 @@
-g use 1.22.8
-
 export GOOS=android
 export GOARCH=386
 export CGO_ENABLED=1
